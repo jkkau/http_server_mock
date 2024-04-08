@@ -13,6 +13,7 @@ import (
 var delayTime int
 var totalReceivedRequests atomic.Int64
 var totalResponses atomic.Int64
+var receivedRequestsInOneSecond atomic.Int64
 var firstReceiveTime time.Time
 var lastResponseTime time.Time
 var isFirstRequest atomic.Bool
@@ -21,12 +22,21 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	totalReceivedRequests.Add(1)
 	if (isFirstRequest.CompareAndSwap(true, false)) {
 		firstReceiveTime = time.Now()
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			for range ticker.C {
+				num := receivedRequestsInOneSecond.Load()
+				receivedRequestsInOneSecond.Store(0)
+				fmt.Printf("%s, received about %d requests in one second\n", time.Now().Format(time.RFC3339), num)
+			}
+		}()
 	}
 	// go func(w http.ResponseWriter) {
 		time.Sleep(time.Millisecond * time.Duration(delayTime))
 
 		w.WriteHeader(http.StatusOK)
 		totalResponses.Add(1)
+		receivedRequestsInOneSecond.Add(1)
 		lastResponseTime = time.Now()
 	// }(w)
 }
@@ -65,6 +75,7 @@ func main() {
 
 	totalReceivedRequests.Store(0)
 	totalResponses.Store(0)
+	receivedRequestsInOneSecond.Store(0)
 	isFirstRequest.Store(true)
 	port := ""
 	if len(os.Args) > 2 {
